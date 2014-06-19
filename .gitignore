@@ -1,0 +1,381 @@
+# 四子棋
+# 中文翻譯:呂仁園,張智堯
+
+import random, copy, sys, pygame
+from pygame.locals import *
+
+"""
+啟動=     pygame.init
+鐘類=     pygame.time.Clock
+幕設大小= pygame.display.set_mode
+幕設標題= pygame.display.set_caption
+字型類=   pygame.font.Font
+影像下載= pygame.image.load
+轉換平滑尺度= pygame.transform.smoothscale
+事件取得= pygame.event.get
+結束=     pygame.quit
+隨機選擇= random.choice
+畫方形=   pygame.draw.rect
+深層複製= copy.deepcopy
+幕更新=   pygame.display.update
+系統離開= sys.exit
+事件張貼= pygame.event.post
+方塊類=   pygame.Rect
+時間等待= pygame.time.wait
+"""
+
+寬空格 = 7  # how many spaces wide the 幕 is
+高空格 = 6 # how many spaces tall the 幕 is
+assert 寬空格 >= 4 and 高空格 >= 4, 'Board must be at least 4x4.'
+
+難度 = 3 # how many moves to look ahead. (>2 is usually too much)
+
+大小空格 = 50 # size of the tokens and individual board spaces in pixels
+
+更新速度 = 30 # frames per second to update the screen
+寬螢幕 = 640 # width of the program's window, in pixels
+高螢幕 = 480 # height in pixels
+
+甲邊界 = int((寬螢幕 - 寬空格 * 大小空格) / 2)
+乙邊界 = int((高螢幕 - 高空格* 大小空格) / 2)
+
+亮藍 = (0, 50, 255)
+白 = (255, 255, 255)
+
+背景顏色 = 亮藍
+文字顏色 = 白
+
+紅 = 'red'
+黑 = 'black'
+空 = None
+人 = 'human'
+電腦 = 'computer'
+
+
+def 主函式():
+    global 更新時間, 顯示, 紅形狀, 黑形狀, 紅圖形
+    global 黑圖形, 圖形, 指示圖形, 指示形狀, 人圖形
+    global 電腦圖形, 贏家形狀, 平手圖形
+
+    pygame.init()
+    更新時間 = pygame.time.Clock()
+    顯示 = pygame.display.set_mode((寬螢幕, 高螢幕))
+    pygame.display.set_caption('Four in a Row')
+
+    紅形狀 = pygame.Rect(int(大小空格 / 2), 高螢幕 - int(3 * 大小空格 / 2), 大小空格, 大小空格)
+    黑形狀 = pygame.Rect(寬螢幕 - int(3 * 大小空格 / 2), 高螢幕 - int(3 * 大小空格 / 2), 大小空格, 大小空格)
+    紅圖形 = pygame.image.load('4row_red.png')
+    紅圖形 = pygame.transform.smoothscale(紅圖形, (大小空格, 大小空格))
+    黑圖形 = pygame.image.load('4row_black.png')
+    黑圖形 = pygame.transform.smoothscale(黑圖形, (大小空格, 大小空格))
+    圖形 = pygame.image.load('4row_board.png')
+    圖形 = pygame.transform.smoothscale(圖形, (大小空格, 大小空格))
+
+    人圖形 = pygame.image.load('4row_humanwinner.png')
+    電腦圖形 = pygame.image.load('4row_computerwinner.png')
+    平手圖形 = pygame.image.load('4row_tie.png')
+    贏家形狀 = 人圖形.get_rect()
+    贏家形狀.center = (int(寬螢幕 / 2), int(高螢幕 / 2))
+
+    指示圖形 = pygame.image.load('4row_arrow.png')
+    指示形狀 = 指示圖形.get_rect()
+    指示形狀.left = 紅形狀.right + 10
+    指示形狀.centery = 紅形狀.centery
+
+    第一次遊戲 = True
+
+    while True:
+        遊戲開始(第一次遊戲)
+        第一次遊戲 = False
+
+
+def 遊戲開始(第一次遊戲):
+    if 第一次遊戲:
+        # Let the computer go first on the first game, so the 玩家
+        # can see how the tokens are dragged from the token piles.
+        換 = 電腦
+        幫助 = True
+    else:
+        # Randomly choose who goes first.
+        if random.randint(0, 1) == 0:
+            換 = 電腦
+        else:
+            換 = 人
+        幫助 = False
+
+    # Set up a blank board data structure.
+    主畫布 = 新畫布()
+
+    while True: # main game loop
+        if 換 == 人:
+            # Human 玩家's 換.
+            玩家移動(主畫布, 幫助)
+            if 幫助:
+                # turn off help arrow after the first move
+                幫助 = False
+            if 贏家(主畫布, 紅):
+                贏家圖片 = 人圖形
+                break
+            換 = 電腦 # switch to other 玩家's turn
+        else:
+            # Computer 玩家's turn.
+            行 = 電腦移動(主畫布)
+            賦予電腦移動(主畫布, 行)
+            移動(主畫布, 黑, 行)
+            if 贏家(主畫布, 黑):
+                贏家圖片 = 電腦圖形
+                break
+            換 = 人 # switch to other 玩家's turn
+
+        if 空間判斷(主畫布):
+            # A completely filled board means it's a tie.
+            贏家圖片 = 平手圖形
+            break
+
+    while True:
+        # Keep looping until 玩家 clicks the mouse or quits.
+        畫布(主畫布)
+        顯示.blit(贏家圖片, 贏家形狀)
+        pygame.display.update()
+        更新時間.tick()
+        for event in pygame.event.get(): # event handling loop
+            if event.type == QUIT or (event.type == KEYUP and event.key == K_ESCAPE):
+                pygame.quit()
+                sys.exit()
+            elif event.type == MOUSEBUTTONUP:
+                return
+
+
+def 移動(幕, 玩家, 行):
+    最低 = 空行(幕, 行)
+    if 最低 != -1:
+        幕[行][最低] = 玩家
+
+
+def 畫布(幕, 例外=None):
+    顯示.fill(背景顏色)
+
+    # draw tokens
+    空格形狀 = pygame.Rect(0, 0, 大小空格, 大小空格)
+    for x in range(寬空格):
+        for y in range(高空格):
+            空格形狀.topleft = (甲邊界 + (x * 大小空格), 乙邊界 + (y * 大小空格))
+            if 幕[x][y] == 紅:
+                顯示.blit(紅圖形, 空格形狀)
+            elif 幕[x][y] == 黑:
+                顯示.blit(黑圖形, 空格形狀)
+
+    # draw the extra token
+    if 例外 != None:
+        if 例外['color'] == 紅:
+            顯示.blit(紅圖形, (例外['x'], 例外['y'], 大小空格, 大小空格))
+        elif 例外['color'] == 黑:
+            顯示.blit(黑圖形, (例外['x'], 例外['y'], 大小空格, 大小空格))
+
+    # draw board over the tokens
+    for x in range(寬空格):
+        for y in range(高空格):
+            空格形狀.topleft = (甲邊界 + (x * 大小空格), 乙邊界 + (y * 大小空格))
+            顯示.blit(圖形, 空格形狀)
+
+    # draw the red and black tokens off to the side
+    顯示.blit(紅圖形, 紅形狀) # red on the left
+    顯示.blit(黑圖形, 黑形狀) # black on the right
+
+
+def 新畫布():
+    幕 = []
+    for x in range(寬空格):
+        幕.append([空] * 高空格)
+    return 幕
+
+
+def 玩家移動(幕, 第一次移動):
+    拖動記號 = False
+    記號甲, 記號乙 = None, None
+    while True:
+        for event in pygame.event.get(): # event handling loop
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == MOUSEBUTTONDOWN and not 拖動記號 and 紅形狀.collidepoint(event.pos):
+                # start of dragging on red token pile.
+                拖動記號 = True
+                記號甲, 記號乙 = event.pos
+            elif event.type == MOUSEMOTION and 拖動記號:
+                # update the position of the red token being dragged
+                記號甲, 記號乙 = event.pos
+            elif event.type == MOUSEBUTTONUP and 拖動記號:
+                # let go of the token being dragged
+                if 記號乙 < 乙邊界 and 記號甲 > 甲邊界 and 記號甲 < 寬螢幕 - 甲邊界:
+                    # let go at the top of the screen.
+                    行 = int((記號甲 - 甲邊界) / 大小空格)
+                    if 空區域(幕, 行):
+                        賦予落子生命(幕, 行, 紅)
+                        幕[行][空行(幕, 行)] = 紅
+                        畫布(幕)
+                        pygame.display.update()
+                        return
+                記號甲, 記號乙 = None, None
+                拖動記號 = False
+        if 記號甲 != None and 記號乙 != None:
+            畫布(幕, {'x':記號甲 - int(大小空格 / 2), 'y':記號乙 - int(大小空格 / 2), 'color':紅})
+        else:
+            畫布(幕)
+
+        if 第一次移動:
+            # Show the help arrow for the 玩家's first move.
+            顯示.blit(指示圖形, 指示形狀)
+
+        pygame.display.update()
+        更新時間.tick()
+
+
+def 賦予落子生命(幕, 行, 顏色):
+    x = 甲邊界 + 行 * 大小空格
+    y = 乙邊界 - 大小空格
+    畫速度 = 1.0
+
+    最低空格空間 = 空行(幕, 行)
+
+    while True:
+        y += int(畫速度)
+        畫速度 += 0.5
+        if int((y - 乙邊界) / 大小空格) >= 最低空格空間:
+            return
+        畫布(幕, {'x':x, 'y':y, 'color':顏色})
+        pygame.display.update()
+        更新時間.tick()
+
+
+def 賦予電腦移動(幕, 行):
+    x = 黑形狀.left
+    y = 黑形狀.top
+    速度 = 1.0
+    # moving the black tile up
+    while y > (乙邊界 - 大小空格):
+        y -= int(速度)
+        速度 += 0.5
+        畫布(幕, {'x':x, 'y':y, 'color':黑})
+        pygame.display.update()
+        更新時間.tick()
+    # moving the black tile over
+    y = 乙邊界 - 大小空格
+    速度 = 1.0
+    while x > (甲邊界 + 行 * 大小空格):
+        x -= int(速度)
+        速度 += 0.5
+        畫布(幕, {'x':x, 'y':y, 'color':黑})
+        pygame.display.update()
+        更新時間.tick()
+    # dropping the black tile
+    賦予落子生命(幕, 行, 黑)
+
+
+def 電腦移動(幕):
+    潛在移動 = 得點移動(幕, 黑, 難度)
+    # get the best fitness from the potential moves
+    最適移動 = -1
+    for i in range(寬空格):
+        if 潛在移動[i] > 最適移動 and 空區域(幕, i):
+            最適移動 = 潛在移動[i]
+    # find all potential moves that have this best fitness
+    好的移動 = []
+    for i in range(len(潛在移動)):
+        if 潛在移動[i] == 最適移動 and 空區域(幕, i):
+            好的移動.append(i)
+    return random.choice(好的移動)
+
+
+def 得點移動(幕, 標題, 預知):
+    if 預知 == 0 or 空間判斷(幕):
+        return [0] * 寬空格
+
+    if 標題 == 紅:
+        空格標題 = 黑
+    else:
+        空格標題 = 紅
+
+    # Figure out the best move to make.
+    潛在移動 = [0] * 寬空格
+    for 第一次移動 in range(寬空格):
+        欺騙幕 = copy.deepcopy(幕)
+        if not 空區域(欺騙幕, 第一次移動):
+            continue
+        移動(欺騙幕, 標題, 第一次移動)
+        if 贏家(欺騙幕, 標題):
+            # a winning move automatically gets a perfect fitness
+            潛在移動[第一次移動] = 1
+            break # don't bother calculating other moves
+        else:
+            # do other 玩家's counter moves and determine best one
+            if 空間判斷(欺騙幕):
+                潛在移動[第一次移動] = 0
+            else:
+                for 計數移動 in range(寬空格):
+                    欺騙幕2 = copy.deepcopy(欺騙幕)
+                    if not 空區域(欺騙幕2, 計數移動):
+                        continue
+                    移動(欺騙幕2, 空格標題, 計數移動)
+                    if 贏家(欺騙幕2, 空格標題):
+                        # a losing move automatically gets the worst fitness
+                        潛在移動[第一次移動] = -1
+                        break
+                    else:
+                        # do the recursive call to 得點移動()
+                        results = 得點移動(欺騙幕2, 標題, 預知 - 1)
+                        潛在移動[第一次移動] += (sum(results) / 寬空格) / 寬空格
+    return 潛在移動
+
+
+def 空行(幕, 行):
+    # Return the row number of the lowest empty row in the given 行.
+    for y in range(高空格-1, -1, -1):
+        if 幕[行][y] == 空:
+            return y
+    return -1
+
+
+def 空區域(幕, 行):
+    # Returns True if there is an empty space in the given 行.
+    # Otherwise returns False.
+    if 行 < 0 or 行 >= (寬空格) or 幕[行][0] != 空:
+        return False
+    return True
+
+
+def 空間判斷(幕):
+    # Returns True if there are no empty spaces anywhere on the board.
+    for x in range(寬空格):
+        for y in range(高空格):
+            if 幕[x][y] == 空:
+                return False
+    return True
+
+
+def 贏家(幕, 標題):
+    # check horizontal spaces
+    for x in range(寬空格 - 3):
+        for y in range(高空格):
+            if 幕[x][y] == 標題 and 幕[x+1][y] == 標題 and 幕[x+2][y] == 標題 and 幕[x+3][y] == 標題:
+                return True
+    # check vertical spaces
+    for x in range(寬空格):
+        for y in range(高空格 - 3):
+            if 幕[x][y] == 標題 and 幕[x][y+1] == 標題 and 幕[x][y+2] == 標題 and 幕[x][y+3] == 標題:
+                return True
+    # check / diagonal spaces
+    for x in range(寬空格 - 3):
+        for y in range(3, 高空格):
+            if 幕[x][y] == 標題 and 幕[x+1][y-1] == 標題 and 幕[x+2][y-2] == 標題 and 幕[x+3][y-3] == 標題:
+                return True
+    # check \ diagonal spaces
+    for x in range(寬空格 - 3):
+        for y in range(高空格 - 3):
+            if 幕[x][y] == 標題 and 幕[x+1][y+1] == 標題 and 幕[x+2][y+2] == 標題 and 幕[x+3][y+3] == 標題:
+                return True
+    return False
+
+
+if __name__ == '__main__':
+    主函式()
